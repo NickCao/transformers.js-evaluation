@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transformers.js Benchmark</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <h1>Transformers.js<br><span class="subtitle">Benchmark</span></h1>
+            </div>
+            <nav class="nav">
+                <button class="nav-btn active" data-view="benchmark">Benchmark</button>
+                <button class="nav-btn" data-view="about">About</button>
+                <button class="nav-btn" data-view="instructions">Instructions</button>
+            </nav>
+        </header>
+
+        <main class="main">
+            <!-- Benchmark View -->
+            <section id="benchmark-view" class="view active">
+                <div class="score-display" id="score-display">
+                    <div class="score-ring">
+                        <svg viewBox="0 0 200 200" class="score-svg">
+                            <circle cx="100" cy="100" r="90" class="score-ring-bg"/>
+                            <circle cx="100" cy="100" r="90" class="score-ring-progress" id="score-ring-progress"/>
+                        </svg>
+                        <div class="score-content">
+                            <div class="score-label">Score</div>
+                            <div class="score-value" id="score-value">—</div>
+                            <div class="score-unit" id="score-unit">tokens/sec</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metrics-grid" id="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-icon">🚀</div>
+                        <div class="metric-label">TTFT</div>
+                        <div class="metric-value" id="ttft-value">—</div>
+                        <div class="metric-unit">ms</div>
+                        <div class="metric-desc">Time to First Token</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon">⏱️</div>
+                        <div class="metric-label">ITL</div>
+                        <div class="metric-value" id="itl-value">—</div>
+                        <div class="metric-unit">ms</div>
+                        <div class="metric-desc">Inter Token Latency</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon">📊</div>
+                        <div class="metric-label">Tokens</div>
+                        <div class="metric-value" id="tokens-value">—</div>
+                        <div class="metric-unit">generated</div>
+                        <div class="metric-desc">Total Tokens Output</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon">⏳</div>
+                        <div class="metric-label">Total Time</div>
+                        <div class="metric-value" id="total-time-value">—</div>
+                        <div class="metric-unit">seconds</div>
+                        <div class="metric-desc">End-to-End Duration</div>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <div class="model-selector">
+                        <label for="model-select">Model</label>
+                        <select id="model-select">
+                            <option value="onnx-community/granite-4.0-350m-ONNX-web" selected>Granite-4.0-350M</option>
+                        </select>
+                    </div>
+                    <div class="device-selector">
+                        <label for="device-select">Device</label>
+                        <select id="device-select">
+                            <option value="webgpu">WebGPU (GPU)</option>
+                            <option value="wasm">WASM (CPU)</option>
+                        </select>
+                    </div>
+                    <div class="tokens-selector">
+                        <label for="tokens-select">Max Tokens</label>
+                        <select id="tokens-select">
+                            <option value="32">32 tokens</option>
+                            <option value="64" selected>64 tokens</option>
+                            <option value="128">128 tokens</option>
+                            <option value="256">256 tokens</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="start-btn" id="start-btn">
+                    <span class="btn-text">Start Benchmark</span>
+                    <span class="btn-icon">▶</span>
+                </button>
+
+                <div class="status-bar" id="status-bar">
+                    <div class="status-text" id="status-text">Ready to benchmark</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                </div>
+
+                <div class="output-section" id="output-section">
+                    <h3>Generated Output</h3>
+                    <div class="output-box" id="output-box"></div>
+                </div>
+
+                <div class="details-section" id="details-section">
+                    <h3>Detailed Results</h3>
+                    <div class="details-table-wrapper">
+                        <table class="details-table">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th>Value</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody id="details-tbody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="export-buttons">
+                        <button class="export-btn" id="copy-json-btn">Copy JSON</button>
+                        <button class="export-btn" id="download-json-btn">Download JSON</button>
+                        <button class="export-btn" id="download-csv-btn">Download CSV</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- About View -->
+            <section id="about-view" class="view">
+                <div class="info-content">
+                    <h2>About Transformers.js Benchmark</h2>
+                    <p>
+                        Transformers.js Benchmark measures the performance of large language model inference 
+                        directly in your browser using <a href="https://huggingface.co/docs/transformers.js" target="_blank">Transformers.js</a>.
+                    </p>
+                    <p>
+                        It evaluates both GPU (via WebGPU) and CPU (via WebAssembly) performance by running 
+                        text generation tasks and measuring key metrics like Time to First Token (TTFT) 
+                        and Inter Token Latency (ITL).
+                    </p>
+                    <h3>Key Metrics</h3>
+                    <ul>
+                        <li><strong>TTFT (Time to First Token)</strong>: The time from sending the prompt until receiving the first generated token. Lower is better.</li>
+                        <li><strong>ITL (Inter Token Latency)</strong>: The average time between consecutive tokens during generation. Lower is better.</li>
+                        <li><strong>Tokens/sec</strong>: The throughput of token generation. Higher is better.</li>
+                    </ul>
+                    <h3>Technology</h3>
+                    <p>
+                        This benchmark uses ONNX Runtime Web for inference, supporting both WebGPU for GPU acceleration 
+                        and WebAssembly for CPU fallback.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Instructions View -->
+            <section id="instructions-view" class="view">
+                <div class="info-content">
+                    <h2>Test Instructions</h2>
+                    <ol>
+                        <li>Select a model from the dropdown. Smaller models will load faster but may have lower quality output.</li>
+                        <li>Choose your preferred device (WebGPU for GPU, WASM for CPU).</li>
+                        <li>Set the maximum number of tokens to generate.</li>
+                        <li>Click "Start Benchmark" to begin the test.</li>
+                        <li>Wait for the model to download (first run only) and for the benchmark to complete.</li>
+                        <li>View your results including TTFT, ITL, and overall throughput.</li>
+                    </ol>
+                    <h3>Tips for Best Results</h3>
+                    <ul>
+                        <li>Close other browser tabs and applications for more consistent results.</li>
+                        <li>Ensure your browser supports WebGPU for GPU acceleration (Chrome 113+, Edge 113+).</li>
+                        <li>Run the benchmark multiple times and compare results.</li>
+                        <li>Models are cached after the first download for faster subsequent runs.</li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Powered by <a href="https://huggingface.co/docs/transformers.js" target="_blank">Transformers.js</a></p>
+        </footer>
+    </div>
+
+    <script type="module" src="/src/benchmark.ts"></script>
+</body>
+</html>
+
