@@ -3,7 +3,7 @@
  * Measures GPU/CPU performance for LLM inference using transformers.js
  */
 
-import { pipeline, type TextGenerationPipeline } from '@huggingface/transformers';
+import { pipeline, TextStreamer, type TextGenerationPipeline } from '@huggingface/transformers';
 
 // Types
 interface BenchmarkResults {
@@ -39,7 +39,7 @@ let results: BenchmarkResults | null = null;
 const elements = {
     scoreValue: document.getElementById('score-value')!,
     scoreUnit: document.getElementById('score-unit')!,
-    scoreRingProgress: document.getElementById('score-ring-progress') as SVGCircleElement,
+    scoreRingProgress: document.getElementById('score-ring-progress') as unknown as SVGCircleElement,
     ttftValue: document.getElementById('ttft-value')!,
     itlValue: document.getElementById('itl-value')!,
     tokensValue: document.getElementById('tokens-value')!,
@@ -133,18 +133,31 @@ async function loadModel(modelId: string, device: string): Promise<boolean> {
     updateStatus(`Loading model: ${modelId}...`, 10);
     
     try {
-        generator = await pipeline('text-generation', modelId, {
+        const pipelineOptions: any = {
             dtype: 'fp16',
-            device: device as 'webgpu' | 'wasm',
+            device: device,
             progress_callback: (progress: any) => {
-                if (progress.status === 'downloading') {
+                console.log('Progress:', progress);
+                
+                if (progress.status === 'initiate') {
+                    updateStatus(`Initializing: ${progress.file || progress.name || 'model'}...`, 5);
+                } else if (progress.status === 'download') {
+                    updateStatus(`Starting download: ${progress.file || progress.name}...`, 8);
+                } else if (progress.status === 'progress') {
+                    // This is the actual download progress
                     const pct = progress.progress || 0;
-                    updateStatus(`Downloading: ${progress.file} (${pct.toFixed(1)}%)`, 10 + pct * 0.3);
-                } else if (progress.status === 'loading') {
-                    updateStatus(`Loading model into memory...`, 45);
+                    const file = progress.file || progress.name || 'model';
+                    const loaded = progress.loaded ? `${(progress.loaded / 1024 / 1024).toFixed(1)}MB` : '';
+                    const total = progress.total ? ` / ${(progress.total / 1024 / 1024).toFixed(1)}MB` : '';
+                    updateStatus(`Downloading ${file}: ${pct.toFixed(0)}% ${loaded}${total}`, 10 + pct * 0.35);
+                } else if (progress.status === 'done') {
+                    updateStatus(`Downloaded: ${progress.file || progress.name}`, 45);
+                } else if (progress.status === 'loading' || progress.status === 'ready') {
+                    updateStatus(`Loading model into memory...`, 48);
                 }
             }
-        }) as TextGenerationPipeline;
+        };
+        generator = await (pipeline as any)('text-generation', modelId, pipelineOptions) as TextGenerationPipeline;
         currentModel = modelId;
         updateStatus('Model loaded successfully', 50);
         return true;
@@ -171,7 +184,7 @@ async function runBenchmark() {
     const maxTokens = parseInt(elements.tokensSelect.value);
     
     // Check WebGPU support
-    if (device === 'webgpu' && !navigator.gpu) {
+    if (device === 'webgpu' && !(navigator as any).gpu) {
         updateStatus('WebGPU not supported in this browser. Please use WASM instead.', 0);
         resetBenchmarkState();
         return;
@@ -199,16 +212,14 @@ async function runBenchmark() {
         elements.outputSection.classList.add('visible');
         elements.outputBox.textContent = '';
         
-        // Run generation with streaming
+        // Run generation with streaming using TextStreamer
         updateStatus('Generating tokens...', 60);
         
-        const output = await generator(BENCHMARK_PROMPT, {
-            max_new_tokens: maxTokens,
-            do_sample: true,
-            temperature: 0.7,
-            top_p: 0.9,
-            callback_function: (beams: any) => {
-                // This is called for each token
+        // Create a custom streamer to track token timing
+        const streamer = new TextStreamer(generator!.tokenizer, {
+            skip_prompt: true,
+            skip_special_tokens: true,
+            callback_function: (text: string) => {
                 const now = performance.now();
                 
                 if (tokenTimestamps.length === 0) {
@@ -216,27 +227,63 @@ async function runBenchmark() {
                 }
                 tokenTimestamps.push(now);
                 
+                // Append new text
+                generatedText += text;
+                elements.outputBox.textContent = generatedText;
+                elements.outputBox.scrollTop = elements.outputBox.scrollHeight;
+                
                 // Update progress
                 const progress = 60 + (tokenTimestamps.length / maxTokens) * 35;
-                updateStatus(`Generating: ${tokenTimestamps.length}/${maxTokens} tokens`, progress);
+                updateStatus(`Generating: ${tokenTimestamps.length}/${maxTokens} tokens`, Math.min(progress, 95));
                 
-                // Get the current output text
-                if (beams && beams[0] && beams[0].output_token_ids && generator) {
-                    const currentText = generator.tokenizer.decode(beams[0].output_token_ids, { skip_special_tokens: true });
-                    if (currentText.length > generatedText.length) {
-                        generatedText = currentText;
-                        elements.outputBox.textContent = generatedText;
-                        elements.outputBox.scrollTop = elements.outputBox.scrollHeight;
+                // === Real-time metrics update ===
+                const currentTime = (now - startTime) / 1000; // seconds
+                const numTokens = tokenTimestamps.length;
+                
+                // TTFT - show after first token
+                if (firstTokenTime && numTokens === 1) {
+                    const ttft = firstTokenTime - startTime;
+                    elements.ttftValue.textContent = ttft.toFixed(1);
+                }
+                
+                // ITL - average inter-token latency (after 2+ tokens)
+                if (numTokens > 1) {
+                    let totalLatency = 0;
+                    for (let i = 1; i < tokenTimestamps.length; i++) {
+                        totalLatency += tokenTimestamps[i]! - tokenTimestamps[i - 1]!;
                     }
+                    const avgItl = totalLatency / (numTokens - 1);
+                    elements.itlValue.textContent = avgItl.toFixed(2);
+                }
+                
+                // Tokens count
+                elements.tokensValue.textContent = String(numTokens);
+                
+                // Total time
+                elements.totalTimeValue.textContent = currentTime.toFixed(2);
+                
+                // Throughput (tokens/sec) - update score display
+                if (currentTime > 0) {
+                    const throughput = numTokens / currentTime;
+                    updateScore(throughput, false);
                 }
             }
+        });
+        
+        const output = await generator!(BENCHMARK_PROMPT, {
+            max_new_tokens: maxTokens,
+            do_sample: true,
+            temperature: 0.7,
+            top_p: 0.9,
+            streamer,
         });
         
         const endTime = performance.now();
         
         // Extract final text
-        if (output && output[0] && output[0].generated_text) {
-            const finalText = output[0].generated_text;
+        const firstOutput = output?.[0] as any;
+        if (firstOutput?.generated_text) {
+            const finalText = firstOutput.generated_text;
             // Handle chat format
             if (Array.isArray(finalText)) {
                 const assistantMsg = finalText.find((m: any) => m.role === 'assistant');
@@ -257,7 +304,7 @@ async function runBenchmark() {
         if (tokenTimestamps.length > 1) {
             const latencies: number[] = [];
             for (let i = 1; i < tokenTimestamps.length; i++) {
-                latencies.push(tokenTimestamps[i] - tokenTimestamps[i - 1]);
+                latencies.push(tokenTimestamps[i]! - tokenTimestamps[i - 1]!);
             }
             itl = latencies.reduce((a, b) => a + b, 0) / latencies.length;
         }
@@ -317,7 +364,7 @@ function getLatencies(): number[] {
     if (!results || results.tokenTimestamps.length < 2) return [0];
     const latencies: number[] = [];
     for (let i = 1; i < results.tokenTimestamps.length; i++) {
-        latencies.push(results.tokenTimestamps[i] - results.tokenTimestamps[i - 1]);
+        latencies.push(results.tokenTimestamps[i]! - results.tokenTimestamps[i - 1]!);
     }
     return latencies;
 }
