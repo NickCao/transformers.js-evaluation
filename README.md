@@ -2,8 +2,6 @@
 
 A browser-based benchmark tool for measuring GPU/CPU performance of large language model inference using [Transformers.js](https://huggingface.co/docs/transformers.js).
 
-![Benchmark Screenshot](https://browserbench.org/Speedometer3.1/)
-
 ## Features
 
 - **Real-time LLM inference benchmarking** in your browser
@@ -13,7 +11,7 @@ A browser-based benchmark tool for measuring GPU/CPU performance of large langua
   - **TTFT (Time to First Token)** - Measures initial latency
   - **ITL (Inter Token Latency)** - Average time between tokens
   - **Throughput (tokens/sec)** - Overall generation speed
-- **Multiple model support** - Test different model sizes
+- **Live metrics updates** - Watch performance in real-time
 - **Export results** as JSON or CSV
 - **Speedometer-inspired UI** - Clean, modern design
 
@@ -47,10 +45,7 @@ bun run dev
 
 | Model | Size | Description |
 |-------|------|-------------|
-| Llama 3.2 1B Instruct | ~1B params | Good balance of quality and speed |
-| Qwen2.5 0.5B Instruct | ~0.5B params | Fast, lightweight |
-| SmolLM2 135M Instruct | ~135M params | Very fast, for testing |
-| SmolLM2 360M Instruct | ~360M params | Fast with better quality |
+| Granite 4.0 350M | ~350M params | IBM's Granite model, optimized for web |
 
 ## Metrics Explained
 
@@ -72,12 +67,37 @@ The overall rate of token generation, calculated as total tokens divided by tota
 
 Higher throughput means better overall performance.
 
+## Deployment
+
+### GitHub Pages
+
+This project includes a GitHub Actions workflow for automatic deployment to GitHub Pages.
+
+1. Push your code to the `main` branch
+2. Go to your repository Settings → Pages
+3. Set Source to "GitHub Actions"
+4. The workflow will automatically build and deploy on push
+
+The site will be available at `https://<username>.github.io/<repo-name>/`
+
+### Manual Build
+
+```bash
+# Build for production
+bun run build
+
+# Preview the build locally
+bun run preview
+
+# The built files are in the ./dist directory
+```
+
 ## Technical Details
 
 - Built with [Transformers.js](https://huggingface.co/docs/transformers.js) v3
 - Uses ONNX Runtime Web for inference
 - Models are automatically downloaded and cached in the browser
-- Supports quantized models (q4f16 for WebGPU, q4 for WASM)
+- Bundled with [Vite](https://vitejs.dev/)
 
 ## Browser Compatibility
 
